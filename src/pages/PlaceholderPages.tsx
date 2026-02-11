@@ -5,7 +5,7 @@ const PlaceholderPage = ({ title }: { title: string }) => (
   </div>
 );
 
-export const SampleOrdersPage = () => <PlaceholderPage title="Step 3: Visit to Sample Order" />;
+// SampleOrdersPage moved to dedicated file
 export const AgreementsPage = () => <PlaceholderPage title="Step 4: Sample Order to Agreement" />;
 export const AnalyticsPage = () => <PlaceholderPage title="Analytics Dashboard" />;
 export const ConfigPage = () => <PlaceholderPage title="Backend Configuration" />;
