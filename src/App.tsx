@@ -11,8 +11,8 @@ import NotFound from "./pages/NotFound";
 import ProspectsPage from "./pages/ProspectsPage";
 import LeadsPage from "./pages/LeadsPage";
 import SampleOrdersPage from "./pages/SampleOrdersPage";
+import AgreementsPage from "./pages/AgreementsPage";
 import {
-  AgreementsPage,
   AnalyticsPage,
   ConfigPage,
   ProfilePage,
