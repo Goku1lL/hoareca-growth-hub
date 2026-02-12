@@ -6,6 +6,5 @@ const PlaceholderPage = ({ title }: { title: string }) => (
 );
 
 // SampleOrdersPage and AgreementsPage moved to dedicated files
-export const AnalyticsPage = () => <PlaceholderPage title="Analytics Dashboard" />;
 export const ConfigPage = () => <PlaceholderPage title="Backend Configuration" />;
 export const ProfilePage = () => <PlaceholderPage title="My Profile" />;

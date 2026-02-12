@@ -31,12 +31,13 @@ const navItems = [
   { title: "Step 2: Lead Gen", url: "/leads", icon: Phone, badge: "12" },
   { title: "Step 3: Sample Orders", url: "/sample-orders", icon: ShoppingBag, badge: "6" },
   { title: "Step 4: Agreements", url: "/agreements", icon: FileSignature, badge: "3" },
-  { title: "Analytics", url: "/analytics", icon: BarChart3 },
 ];
 
 const adminItems = [
+  { title: "Admin Dashboard", url: "/admin", icon: BarChart3 },
   { title: "Backend Config", url: "/config", icon: Settings },
 ];
+
 
 export function AppSidebar() {
   const { state } = useSidebar();
