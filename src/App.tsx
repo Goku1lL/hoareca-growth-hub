@@ -12,8 +12,8 @@ import ProspectsPage from "./pages/ProspectsPage";
 import LeadsPage from "./pages/LeadsPage";
 import SampleOrdersPage from "./pages/SampleOrdersPage";
 import AgreementsPage from "./pages/AgreementsPage";
+import AdminDashboardPage from "./pages/AdminDashboardPage";
 import {
-  AnalyticsPage,
   ConfigPage,
   ProfilePage,
 } from "./pages/PlaceholderPages";
@@ -40,7 +40,7 @@ const AppRoutes = () => {
       <Route path="/leads" element={<ProtectedRoute><LeadsPage /></ProtectedRoute>} />
       <Route path="/sample-orders" element={<ProtectedRoute><SampleOrdersPage /></ProtectedRoute>} />
       <Route path="/agreements" element={<ProtectedRoute><AgreementsPage /></ProtectedRoute>} />
-      <Route path="/analytics" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
+      <Route path="/admin" element={<ProtectedRoute><AdminDashboardPage /></ProtectedRoute>} />
       <Route path="/config" element={<ProtectedRoute><ConfigPage /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
