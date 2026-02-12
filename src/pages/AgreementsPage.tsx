@@ -19,12 +19,14 @@ import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
 import { useAgreements, useDistributionPartners, useDeliverySlots } from "@/hooks/useAgreements";
+import { supabase } from "@/integrations/supabase/client";
 import { useSampleOrders } from "@/hooks/useSampleOrders";
 import { useLeads } from "@/hooks/useLeads";
+import { useProspects } from "@/hooks/useProspects";
 import { useToast } from "@/hooks/use-toast";
 import {
   Search, Star, CalendarIcon, Package, MapPin, RotateCcw, XCircle,
-  Send, FileCheck, AlertTriangle, Clock,
+  Send, FileCheck, AlertTriangle, Clock, Plus,
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -62,6 +64,7 @@ export default function AgreementsPage() {
   const { agreements, loading, addAgreement, updateAgreement, refetch } = useAgreements();
   const { orders } = useSampleOrders();
   const { leads } = useLeads();
+  const { prospects } = useProspects();
   const partners = useDistributionPartners();
   const slots = useDeliverySlots();
   const { toast } = useToast();
@@ -100,6 +103,16 @@ export default function AgreementsPage() {
   const [revisitAgreementId, setRevisitAgreementId] = useState<string | null>(null);
   const [revisitDate, setRevisitDate] = useState<Date | undefined>();
   const [revisitRemarks, setRevisitRemarks] = useState("");
+  const [revisitTime, setRevisitTime] = useState("");
+
+  // Low-rating revisit fields (inline in create dialog)
+  const [lowRatingRevisitDate, setLowRatingRevisitDate] = useState<Date | undefined>();
+  const [lowRatingRevisitTime, setLowRatingRevisitTime] = useState("");
+
+  // Fresh prospect agreement
+  const [freshProspectOpen, setFreshProspectOpen] = useState(false);
+  const [selectedProspectId, setSelectedProspectId] = useState("");
+  const [freshMode, setFreshMode] = useState(false);
 
   // Sample orders without an agreement = "Quality Pending"
   const pendingOrders = useMemo(() => {
@@ -182,12 +195,17 @@ export default function AgreementsPage() {
     setMailId("");
     setKamRemarks("");
     setErrors({});
+    setLowRatingRevisitDate(undefined);
+    setLowRatingRevisitTime("");
+    setFreshMode(false);
+    setSelectedProspectId("");
   };
 
   const validate = (): FormErrors => {
     const e: FormErrors = {};
     if (rating === 0) e.rating = "Rating is required";
     if (rating > 0 && rating < 6 && !qualityRemarks.trim()) e.qualityRemarks = "Feedback remarks required for low rating";
+    if (rating > 0 && rating < 6 && !lowRatingRevisitDate) e.lowRatingRevisitDate = "Revisit date required for low rating";
     if (rating >= 6) {
       if (!pricingType) e.pricingType = "Required";
       if (!agreedPrice || Number(agreedPrice) <= 0) e.agreedPrice = "Required";
@@ -205,20 +223,66 @@ export default function AgreementsPage() {
   };
 
   const handleSave = async () => {
-    if (!selectedOrderId) return;
+    let orderId = selectedOrderId;
+
+    // Fresh prospect mode: create lead + sample order first
+    if (freshMode && !orderId && selectedProspectId) {
+      const prospect = prospects.find(p => p.id === selectedProspectId);
+      if (!prospect) return;
+
+      // Create a lead from the prospect
+      const { data: leadData, error: leadErr } = await supabase
+        .from("leads")
+        .insert({
+          client_name: prospect.restaurant_name,
+          pincode: prospect.pincode,
+          locality: prospect.locality,
+          prospect_id: prospect.id,
+          status: "qualified",
+        })
+        .select("id")
+        .single();
+      if (leadErr || !leadData) {
+        toast({ title: "Error creating lead", description: leadErr?.message, variant: "destructive" });
+        return;
+      }
+
+      // Create a placeholder sample order
+      const { data: orderData, error: orderErr } = await supabase
+        .from("sample_orders")
+        .insert({
+          lead_id: leadData.id,
+          status: "sample_delivered",
+          remarks: "Created via fresh prospect agreement flow",
+        })
+        .select("id")
+        .single();
+      if (orderErr || !orderData) {
+        toast({ title: "Error creating sample order", description: orderErr?.message, variant: "destructive" });
+        return;
+      }
+
+      orderId = orderData.id;
+    }
+
+    if (!orderId) return;
     const e = validate();
     setErrors(e);
     if (Object.keys(e).length > 0) return;
 
     if (rating < 6) {
+      const revisitInfo = lowRatingRevisitDate
+        ? ` [Re-visit: ${format(lowRatingRevisitDate, "dd MMM yyyy")}${lowRatingRevisitTime ? " at " + lowRatingRevisitTime : ""}]`
+        : "";
       const ok = await addAgreement({
-        sample_order_id: selectedOrderId,
+        sample_order_id: orderId,
         quality_feedback: false,
-        quality_remarks: qualityRemarks,
-        status: "quality_failed",
+        quality_remarks: qualityRemarks + revisitInfo,
+        status: "revisit_needed",
+        remarks: lowRatingRevisitDate ? `[Re-visit: ${format(lowRatingRevisitDate, "dd MMM yyyy")}${lowRatingRevisitTime ? " at " + lowRatingRevisitTime : ""}] ${qualityRemarks}` : null,
       });
       if (ok) {
-        toast({ title: "Quality feedback saved" });
+        toast({ title: "Quality feedback saved & revisit scheduled" });
         resetForm();
         setCreateOpen(false);
       }
@@ -226,7 +290,7 @@ export default function AgreementsPage() {
     }
 
     const ok = await addAgreement({
-      sample_order_id: selectedOrderId,
+      sample_order_id: orderId,
       quality_feedback: true,
       quality_remarks: qualityRemarks || null,
       pricing_type: pricingType,
@@ -268,15 +332,17 @@ export default function AgreementsPage() {
 
   const handleRevisit = async () => {
     if (!revisitAgreementId || !revisitDate) return;
+    const timeStr = revisitTime ? ` at ${revisitTime}` : "";
     const ok = await updateAgreement(revisitAgreementId, {
       status: "revisit_needed",
-      remarks: `[Re-visit: ${format(revisitDate, "dd MMM yyyy")}] ${revisitRemarks}`,
+      remarks: `[Re-visit: ${format(revisitDate, "dd MMM yyyy")}${timeStr}] ${revisitRemarks}`,
     });
     if (ok) {
-      toast({ title: `Re-visit scheduled for ${format(revisitDate, "dd MMM yyyy")}` });
+      toast({ title: `Re-visit scheduled for ${format(revisitDate, "dd MMM yyyy")}${timeStr}` });
       setRevisitAgreementId(null);
       setRevisitDate(undefined);
       setRevisitRemarks("");
+      setRevisitTime("");
     }
   };
 
@@ -407,6 +473,9 @@ export default function AgreementsPage() {
             {pendingOrders.length} pending · {agreements.length} agreements
           </p>
         </div>
+        <Button size="sm" onClick={() => { resetForm(); setFreshMode(true); setCreateOpen(true); }}>
+          <Plus className="w-4 h-4 mr-1" /> New Agreement (Fresh Prospect)
+        </Button>
       </div>
 
       {/* Tabs */}
@@ -462,8 +531,43 @@ export default function AgreementsPage() {
           <DialogHeader><DialogTitle>New Agreement</DialogTitle></DialogHeader>
           <div className="grid gap-4 py-2">
 
+            {/* Fresh Prospect Selection */}
+            {freshMode && !selectedOrderId && (
+              <div className="space-y-2">
+                <Label className="text-xs font-medium">Select Prospect *</Label>
+                <Select value={selectedProspectId} onValueChange={setSelectedProspectId}>
+                  <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Choose a prospect..." /></SelectTrigger>
+                  <SelectContent>
+                    {prospects.filter(p => p.status === "available").map(p => (
+                      <SelectItem key={p.id} value={p.id} className="text-xs">
+                        {p.restaurant_name} — {p.locality}, {p.pincode}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedProspectId && (
+                  <Card className="bg-muted/50">
+                    <CardContent className="p-3 space-y-1 text-xs">
+                      <p className="font-medium text-muted-foreground">Prospect Info</p>
+                      {(() => {
+                        const sp = prospects.find(p => p.id === selectedProspectId);
+                        return sp ? (
+                          <div className="grid grid-cols-2 gap-1">
+                            <span>Name: {sp.restaurant_name}</span>
+                            <span>Pincode: {sp.pincode}</span>
+                            <span>Locality: {sp.locality}</span>
+                            <span>Source: {sp.source || "—"}</span>
+                          </div>
+                        ) : null;
+                      })()}
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            )}
+
             {/* Pre-filled Summary */}
-            {selectedOrder && selectedLead && (
+            {selectedOrder && selectedLead && !freshMode && (
               <Card className="bg-muted/50">
                 <CardContent className="p-3 space-y-1 text-xs">
                   <p className="font-medium text-muted-foreground">Sample Order Summary</p>
@@ -480,7 +584,7 @@ export default function AgreementsPage() {
             )}
 
             {/* Quality Rating */}
-            {selectedOrderId && (
+            {(selectedOrderId || (freshMode && selectedProspectId)) && (
               <div className="space-y-2">
                 <Label className="text-xs font-medium">Overall Quality Rating (1-10) *</Label>
                 <StarRating value={rating} onChange={setRating} />
@@ -489,14 +593,41 @@ export default function AgreementsPage() {
               </div>
             )}
 
-            {/* Low rating - quality remarks */}
+            {/* Low rating - quality remarks + revisit scheduler */}
             {rating > 0 && rating < 6 && (
-              <div className="space-y-2 p-3 border border-warning/30 rounded-md bg-warning/5">
+              <div className="space-y-3 p-3 border border-warning/30 rounded-md bg-warning/5">
                 <Label className="text-xs font-medium flex items-center gap-1">
                   <AlertTriangle className="w-3 h-3 text-warning" /> Quality Feedback Remarks *
                 </Label>
                 <Textarea value={qualityRemarks} onChange={e => setQualityRemarks(e.target.value)} placeholder="Describe quality issues..." className="text-xs min-h-[80px]" />
                 <FieldError msg={errors.qualityRemarks} />
+
+                <div className="border-t border-warning/20 pt-3 space-y-2">
+                  <Label className="text-xs font-medium flex items-center gap-1">
+                    <Clock className="w-3 h-3 text-warning" /> Schedule Revisit *
+                  </Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-[10px] text-muted-foreground">Date</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className={cn("h-8 text-xs w-full justify-start", !lowRatingRevisitDate && "text-muted-foreground")}>
+                            <CalendarIcon className="w-3 h-3 mr-1" />
+                            {lowRatingRevisitDate ? format(lowRatingRevisitDate, "dd MMM yyyy") : "Pick date"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar mode="single" selected={lowRatingRevisitDate} onSelect={setLowRatingRevisitDate} initialFocus className="p-3 pointer-events-auto" />
+                        </PopoverContent>
+                      </Popover>
+                      <FieldError msg={errors.lowRatingRevisitDate} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] text-muted-foreground">Time</Label>
+                      <Input type="time" value={lowRatingRevisitTime} onChange={e => setLowRatingRevisitTime(e.target.value)} className="h-8 text-xs" />
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -665,12 +796,12 @@ export default function AgreementsPage() {
           </div>
 
           <DialogFooter className="gap-2">
-            {rating > 0 && rating < 6 && selectedOrderId && (
+            {rating > 0 && rating < 6 && (selectedOrderId || (freshMode && selectedProspectId)) && (
               <Button size="sm" className="text-xs" onClick={handleSave}>
-                <Send className="w-3 h-3 mr-1" /> Save Quality Feedback
+                <Send className="w-3 h-3 mr-1" /> Save Feedback & Schedule Revisit
               </Button>
             )}
-            {rating >= 6 && selectedOrderId && (
+            {rating >= 6 && (selectedOrderId || (freshMode && selectedProspectId)) && (
               <Button size="sm" className="text-xs" onClick={handleSave}>
                 <Send className="w-3 h-3 mr-1" /> Save & Send Agreement
               </Button>
@@ -709,23 +840,29 @@ export default function AgreementsPage() {
       </Dialog>
 
       {/* Revisit Dialog */}
-      <Dialog open={!!revisitAgreementId} onOpenChange={open => { if (!open) { setRevisitAgreementId(null); setRevisitDate(undefined); setRevisitRemarks(""); } }}>
+      <Dialog open={!!revisitAgreementId} onOpenChange={open => { if (!open) { setRevisitAgreementId(null); setRevisitDate(undefined); setRevisitRemarks(""); setRevisitTime(""); } }}>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>Schedule Re-visit</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <div className="space-y-1">
-              <Label className="text-xs font-medium">Re-visit Date *</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="h-8 text-xs w-full justify-start">
-                    <CalendarIcon className="w-3 h-3 mr-1" />
-                    {revisitDate ? format(revisitDate, "dd MMM yyyy") : "Pick date"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar mode="single" selected={revisitDate} onSelect={setRevisitDate} initialFocus />
-                </PopoverContent>
-              </Popover>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs font-medium">Re-visit Date *</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="h-8 text-xs w-full justify-start">
+                      <CalendarIcon className="w-3 h-3 mr-1" />
+                      {revisitDate ? format(revisitDate, "dd MMM yyyy") : "Pick date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar mode="single" selected={revisitDate} onSelect={setRevisitDate} initialFocus className="p-3 pointer-events-auto" />
+                  </PopoverContent>
+                </Popover>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs font-medium">Time</Label>
+                <Input type="time" value={revisitTime} onChange={e => setRevisitTime(e.target.value)} className="h-8 text-xs" />
+              </div>
             </div>
             <div className="space-y-1">
               <Label className="text-xs font-medium">Remarks</Label>
