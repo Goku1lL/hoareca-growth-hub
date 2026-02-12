@@ -68,6 +68,11 @@ export default function ProspectsPage() {
   const [selectedTag, setSelectedTag] = useState("");
   const [recallDate, setRecallDate] = useState<Date | undefined>();
 
+  // Assignment purpose dialog state
+  const [assignPurposeOpen, setAssignPurposeOpen] = useState(false);
+  const [assignPurpose, setAssignPurpose] = useState("");
+  const [pendingAssignIds, setPendingAssignIds] = useState<string[]>([]);
+
   // Add form state
   const [form, setForm] = useState({
     pincode: "", locality: "", restaurant_name: "", location: "",
@@ -127,9 +132,32 @@ export default function ProspectsPage() {
 
   const handleBulkStatus = async (status: string) => {
     if (selected.length === 0) return;
+    if (status === "assigned") {
+      setPendingAssignIds(selected);
+      setAssignPurpose("");
+      setAssignPurposeOpen(true);
+      return;
+    }
     await updateProspectStatus(selected, status);
     setSelected([]);
   };
+
+  const handleConfirmAssign = async () => {
+    if (!assignPurpose || pendingAssignIds.length === 0) return;
+    for (const id of pendingAssignIds) {
+      await updateProspect(id, { status: "assigned", tag: assignPurpose });
+    }
+    setSelected([]);
+    setPendingAssignIds([]);
+    setAssignPurposeOpen(false);
+  };
+
+  const assignPurposes = [
+    "Call again",
+    "Visit for lead conversion",
+    "Visit for sample order",
+    "Visit for agreement",
+  ];
 
   const toggleSort = (field: typeof sortField) => {
     if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -421,6 +449,31 @@ export default function ProspectsPage() {
           <DialogFooter>
             <DialogClose asChild><Button variant="outline" size="sm">Cancel</Button></DialogClose>
             <Button size="sm" onClick={handleSaveRecall} disabled={!recallDate}>Save Date</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* Assignment Purpose Dialog */}
+      <Dialog open={assignPurposeOpen} onOpenChange={open => { if (!open) { setAssignPurposeOpen(false); setPendingAssignIds([]); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle className="text-base">Purpose of Assignment</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <Label className="text-xs">Why are you assigning {pendingAssignIds.length} prospect(s)?</Label>
+            <div className="flex flex-col gap-2">
+              {assignPurposes.map(p => (
+                <Badge
+                  key={p}
+                  variant="outline"
+                  className={cn("cursor-pointer text-xs px-3 py-2 transition-colors justify-start", assignPurpose === p ? "bg-primary/10 text-primary border-primary/30" : "hover:bg-muted")}
+                  onClick={() => setAssignPurpose(p)}
+                >
+                  {p}
+                </Badge>
+              ))}
+            </div>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild><Button variant="outline" size="sm">Cancel</Button></DialogClose>
+            <Button size="sm" onClick={handleConfirmAssign} disabled={!assignPurpose}>Assign</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
