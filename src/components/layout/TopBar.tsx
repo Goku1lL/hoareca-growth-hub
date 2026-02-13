@@ -1,10 +1,9 @@
-import { Bell, Phone, MapPin, UserPlus, LogOut, Search } from "lucide-react";
+import { LogOut, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useAuth } from "@/contexts/AuthContext";
-import { useNavigate } from "react-router-dom";
 
 const roleLabels: Record<string, string> = {
   calling_agent: "Calling Agent",
@@ -15,7 +14,6 @@ const roleLabels: Record<string, string> = {
 
 export function TopBar() {
   const { user, userRole, signOut } = useAuth();
-  const navigate = useNavigate();
 
   return (
     <header className="h-14 border-b bg-card flex items-center gap-2 px-4 shrink-0">
@@ -33,23 +31,6 @@ export function TopBar() {
       </div>
 
       <div className="flex items-center gap-1 ml-auto">
-        <Button variant="ghost" size="sm" className="hidden sm:inline-flex text-xs gap-1" onClick={() => navigate("/leads")}>
-          <Phone className="w-3.5 h-3.5" /> Log Call
-        </Button>
-        <Button variant="ghost" size="sm" className="hidden sm:inline-flex text-xs gap-1" onClick={() => navigate("/sample-orders")}>
-          <MapPin className="w-3.5 h-3.5" /> Start Visit
-        </Button>
-        <Button variant="ghost" size="sm" className="hidden sm:inline-flex text-xs gap-1" onClick={() => navigate("/leads")}>
-          <UserPlus className="w-3.5 h-3.5" /> Add Lead
-        </Button>
-
-        <Button variant="ghost" size="icon" className="relative">
-          <Bell className="w-4 h-4" />
-          <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-accent text-accent-foreground text-[10px] flex items-center justify-center font-bold">
-            5
-          </span>
-        </Button>
-
         <div className="hidden sm:flex items-center gap-2 ml-2 pl-2 border-l">
           <div className="text-right">
             <p className="text-xs font-medium truncate max-w-[120px]">{user?.email}</p>

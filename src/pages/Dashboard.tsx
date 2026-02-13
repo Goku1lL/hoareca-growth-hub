@@ -3,6 +3,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
 import {
   Database,
   Phone,
@@ -10,13 +13,14 @@ import {
   FileSignature,
   Users,
   TrendingUp,
-  Calendar,
+  Calendar as CalendarIcon,
   PhoneCall,
   MapPin,
   IndianRupee,
 } from "lucide-react";
-import { format, addDays, startOfWeek } from "date-fns";
+import { format, addDays, startOfWeek, endOfWeek, isWithinInterval, isSameDay } from "date-fns";
 import { useState } from "react";
+import type { DateRange } from "react-day-picker";
 
 const metrics = [
   { label: "Total Prospects", value: "147", icon: Database, color: "text-primary" },
@@ -38,7 +42,6 @@ const steps = [
 
 const dummyAppointments: Record<string, Array<{ time: string; name: string; type: string }>> = {};
 
-// Generate appointments for current week
 const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
 for (let i = 0; i < 7; i++) {
   const day = format(addDays(weekStart, i), "yyyy-MM-dd");
@@ -75,6 +78,22 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const today = format(new Date(), "yyyy-MM-dd");
   const [selectedDay, setSelectedDay] = useState(today);
+
+  const defaultFrom = startOfWeek(new Date(), { weekStartsOn: 1 });
+  const defaultTo = endOfWeek(new Date(), { weekStartsOn: 1 });
+  const [dateRange, setDateRange] = useState<DateRange | undefined>({ from: defaultFrom, to: defaultTo });
+
+  const rangeStart = dateRange?.from || defaultFrom;
+  const rangeEnd = dateRange?.to || dateRange?.from || defaultTo;
+
+  // Generate days for the selected range
+  const rangeDays: Date[] = [];
+  let cursor = new Date(rangeStart);
+  while (cursor <= rangeEnd) {
+    rangeDays.push(new Date(cursor));
+    cursor = addDays(cursor, 1);
+  }
+
   const appointments = dummyAppointments[selectedDay] || [];
 
   return (
@@ -87,14 +106,39 @@ const Dashboard = () => {
       {/* Calendar Strip */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <Calendar className="w-4 h-4" /> This Week's Schedule
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <CalendarIcon className="w-4 h-4" /> Schedule
+            </CardTitle>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="text-xs h-7 gap-1.5">
+                  <CalendarIcon className="w-3 h-3" />
+                  {dateRange?.from ? (
+                    dateRange.to ? (
+                      `${format(dateRange.from, "MMM d")} – ${format(dateRange.to, "MMM d")}`
+                    ) : format(dateRange.from, "MMM d")
+                  ) : "Select dates"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="end">
+                <Calendar
+                  mode="range"
+                  selected={dateRange}
+                  onSelect={(range) => {
+                    setDateRange(range);
+                    if (range?.from) setSelectedDay(format(range.from, "yyyy-MM-dd"));
+                  }}
+                  numberOfMonths={1}
+                  className={cn("p-3 pointer-events-auto")}
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="flex gap-2 overflow-x-auto pb-2">
-            {Array.from({ length: 7 }, (_, i) => {
-              const date = addDays(weekStart, i);
+            {rangeDays.map((date, i) => {
               const dateStr = format(date, "yyyy-MM-dd");
               const isToday = dateStr === today;
               const isSelected = dateStr === selectedDay;
