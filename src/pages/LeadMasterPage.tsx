@@ -66,9 +66,9 @@ export default function LeadMasterPage() {
       const agreement = order ? agreements.find(a => a.sample_order_id === order.id) : null;
 
       let currentStage: CurrentStage = "Prospect";
-      if (agreement?.status === "signed" && agreement.esign_status === "completed") {
+      if (agreement?.status === "signed") {
         currentStage = "Customer";
-      } else if (agreement && ["signed", "agreement_sent"].includes(agreement.status)) {
+      } else if (agreement && ["agreement_sent", "pending_feedback"].includes(agreement.status)) {
         currentStage = "Agreement";
       } else if (order) {
         currentStage = "Sample Order";
